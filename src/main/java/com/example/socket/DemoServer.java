@@ -35,7 +35,9 @@ public class DemoServer {
                 // 1. 소켓 테스트
                 //Thread thread = testSocket(seq, socket);
                 // 2. 웹서버 테스트
-                Thread thread = testWebServer(seq, socket);
+                //Thread thread = testWebServer(seq, socket);
+                // 3. Http 테스트
+                Thread thread = testHttp(seq, socket);
 
                 thread.start();
 
@@ -56,7 +58,7 @@ public class DemoServer {
         }
 
     }
-    
+
     // 1. 소켓 테스트
     private static Thread testSocket(int seq, Socket socket) {
         return new Thread(new Runnable() {
@@ -158,6 +160,58 @@ public class DemoServer {
         });
     }
 
+    // 3. HTTP 통신 테스트
+    private static Thread testHttp(int seq, Socket socket) {
+        return new Thread(new Runnable() {
+            @Override
+            public void run() {
+                System.out.println(seq + " thread start");
+                try{
+                    // 1. 데이터 받기
+                    InputStream is = socket.getInputStream();
+
+                    String recvMessage = readData(socket);
+
+                    // \r\n 을 기준으로 split - 마지막에 \r\n이 두번나오면 stop
+                    String[] headerArr = recvMessage.split("\r\n");
+//                    for(String s : headerArr) {
+//                        System.out.println("데이터 : " + s);
+//                    }
+
+                    // 제일 첫번째 줄에서 정보를 꺼냄
+                    String[] infos = headerArr[0].split(" ");
+                    String httpMethod = infos[0];
+                    String recvFileName = infos[1].substring(1);    // 맨앞에 '/' 제거
+                    String httpVersion = infos[2];
+
+
+                    // (3) 파일이 존재하는지 확인
+                    String dirPath = "C:\\source\\ToyProjectWorkspace\\toy_socket\\src\\main\\resources";
+                    File dir = new File(dirPath);
+                    File[] files = dir.listFiles();
+                    boolean isFileExist = false;
+                    for (File file : files) {
+                        if (recvFileName.equals(file.getName())) {
+                            isFileExist = true;
+                            break;
+                        }
+                    }
+
+                    // (4) 파일 내용 읽기
+                    String fileContents = null;
+                    if (isFileExist) {
+                        byte[] fileBytes = Files.readAllBytes(Paths.get(dirPath + "\\" + recvFileName));
+                        fileContents = new String(fileBytes);
+                    }
+
+                    sendHttpResponse(socket, fileContents);
+
+                }catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }});
+    }
 
     ///////////////////////////////////////////////// 내부 메서드 ////////////////////////////////////////////////////////
 
@@ -188,7 +242,33 @@ public class DemoServer {
         System.out.println("****************** 전송완료 ******************\n");
 
     }
-    
 
+    // http로 데이터 전송
+    private static void sendHttpResponse(Socket socket, String fileMessage) throws IOException {
+        int contentLength = fileMessage.length();
+        String sendMessage =
+                "HTTP/1.1 200 OK" + "\r\n"
+                        +"Date: Fri, 18 Aug 2021 15:36:25 GMT" + "\r\n"
+                        +"X-UA-Compatible: IE=10" + "\r\n"
+                        +"Cache-Control: no-cache, no-store, must-revalidate" + "\r\n"
+                        +"Content-Type: text/plain;charset=UTF-8" + "\r\n"
+                        +"Content-Language: ko-KR" + "\r\n"
+                        +"Vary: Accept-Encoding" + "\r\n"
+                        +"Content-Encoding: identity" + "\r\n"
+                        +"X-UA-Device-Type: pc" + "\r\n"
+                        +"Content-Length: " +contentLength+ "\r\n"
+                        +"Connection: close" + "\r\n"
+                        +"" + "\r\n"
+                        +fileMessage + "\r\n"
+                ;
+
+        OutputStream os = socket.getOutputStream();
+        os.write(sendMessage.getBytes());
+        os.flush();
+
+        System.out.println("클라이언트로 보낸 메세지 : " + sendMessage);
+        System.out.println("****************** 전송완료 ******************\n");
+
+    }
 
 }
